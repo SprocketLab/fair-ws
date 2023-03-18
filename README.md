@@ -1,6 +1,6 @@
 # fair-ws: Mitigating Source Bias for Fairer Weak Supervision
 
-![image-20230317215719121](/Users/chshin/Library/Application Support/typora-user-images/image-20230317215719121.png)
+![framework](assets/sbm.png)
 
 This repository provides the official implementation of the following paper: 
 
