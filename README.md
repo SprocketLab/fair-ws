@@ -48,6 +48,17 @@ fair-ws/
 
 ````
 
+It can be done by the following command lines.
+
+```
+cd fair-ws
+mkdir data
+cd data
+wget https://www.dropbox.com/sh/7hwqrigdn5oehn7/AACBq7q-eKuOkKQi5nxM01IKa -O datasets.zip
+unzip datasets.zip
+```
+
+
 
 
 ## Code example
