@@ -48,7 +48,7 @@ fair-ws/
 
 ````
 
-It can be done by the following command lines.
+It can be done by the following command lines. It may take ~30 minutes (5.9G).
 
 ```
 cd fair-ws
