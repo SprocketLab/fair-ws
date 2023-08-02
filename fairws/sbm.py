@@ -6,43 +6,66 @@ import ot
 sys.path.append('../fairws')
 sys.path.append('../../fairws')
 from snorkel.labeling.model import LabelModel
-from data_util import preprocess_binary_array, save_sbm_mapping, load_sbm_mapping, check_sbm_mapping_path
+from data_util import preprocess_binary_array, save_sbm_mapping, load_sbm_mapping, save_sbm_mapping_with_seed, load_sbm_mapping_with_seed, check_sbm_mapping_path, check_sbm_mapping_path_with_seed
 
 np.random.seed(2023)
 torch.manual_seed(2023)
 
 DEFAULT_DATA_PATH = '../data'
 
-def get_baseline_pseudolabel(L, y_train=None):
+def get_baseline_pseudolabel(L, seed=123, y_train=None):
     
     label_model = LabelModel(cardinality=2, verbose=False)
     label_model.fit(L_train=L,
-                    n_epochs=1000, log_freq=100, seed=123)
+                    n_epochs=1000, log_freq=100, seed=seed)
     y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
     
     return y_train_pseudo
 
 
-def get_sbm_pseudolabel(L, x_train, a_train, dataset_name,
+def get_sbm_pseudolabel(L, x_train, a_train, dataset_name, seed=123,
                         ot_type=None, diff_threshold=0.05, use_LIFT_embedding=False,
                         mapping_cache=True, data_base_path=DEFAULT_DATA_PATH):
     
-    if check_sbm_mapping_path(dataset_name, ot_type, use_LIFT_embedding, data_base_path):
-        sbm_mapping_01, sbm_mapping_10 = load_sbm_mapping(dataset_name, ot_type,
+    if check_sbm_mapping_path_with_seed(dataset_name, seed, ot_type, use_LIFT_embedding, data_base_path):
+        sbm_mapping_01, sbm_mapping_10 = load_sbm_mapping_with_seed(dataset_name, seed, ot_type,
                                                         use_LIFT_embedding, data_base_path)
     else:
         sbm_mapping_01, sbm_mapping_10 = find_sbm_mapping(x_train, a_train, ot_type)
         if mapping_cache:
-            save_sbm_mapping(sbm_mapping_01, sbm_mapping_10, dataset_name, ot_type, use_LIFT_embedding)
+            save_sbm_mapping_with_seed(sbm_mapping_01, sbm_mapping_10, dataset_name, seed,
+                             ot_type, use_LIFT_embedding, data_base_path=data_base_path)
             
     
     
     L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, diff_threshold)
     label_model = LabelModel(cardinality=2, verbose=False)
-    label_model.fit(L_train=L, n_epochs=1000, log_freq=100, seed=123)
+    label_model.fit(L_train=L, n_epochs=1000, log_freq=100, seed=seed)
     y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
     
     return y_train_pseudo
+
+# def get_sbm_pseudolabel(L, x_train, a_train, dataset_name, seed=123,
+#                         ot_type=None, diff_threshold=0.05, use_LIFT_embedding=False,
+#                         mapping_cache=True, data_base_path=DEFAULT_DATA_PATH):
+    
+#     if check_sbm_mapping_path(dataset_name, ot_type, use_LIFT_embedding, data_base_path):
+#         sbm_mapping_01, sbm_mapping_10 = load_sbm_mapping(dataset_name, ot_type,
+#                                                         use_LIFT_embedding, data_base_path)
+#     else:
+#         sbm_mapping_01, sbm_mapping_10 = find_sbm_mapping(x_train, a_train, ot_type)
+#         if mapping_cache:
+#             save_sbm_mapping(sbm_mapping_01, sbm_mapping_10, dataset_name,
+#                              ot_type, use_LIFT_embedding, data_base_path=data_base_path)
+            
+    
+    
+#     L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, diff_threshold)
+#     label_model = LabelModel(cardinality=2, verbose=False)
+#     label_model.fit(L_train=L, n_epochs=1000, log_freq=100, seed)
+#     y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
+    
+#     return y_train_pseudo
 
 def correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, diff_threshold):
     if isinstance(L, np.ndarray):

@@ -12,7 +12,8 @@ def load_dataset(dataset_name, data_base_path=DEFAULT_DATA_PATH, use_torch=False
     # load dataset
     
     train = np.load(os.path.join(data_base_path, data_folder_name, 
-                                    f'{data_folder_name}_train.npz'),
+                                 f'{data_folder_name}_train.npz'),
+#                                     f'{data_folder_name}_train.npz'),
                     allow_pickle=True)
     test = np.load(os.path.join(data_base_path, data_folder_name,
                                 f'{data_folder_name}_test.npz'),
@@ -46,11 +47,17 @@ def load_wrench_dataset(dataset_name, data_base_path=DEFAULT_DATA_PATH, use_torc
     
     # load dataset
     train = np.load(os.path.join(data_base_path, data_folder_name, 
-                                    f'{data_folder_name}_train.npz'),
+                                    'train.npz'),
                     allow_pickle=True)
     test = np.load(os.path.join(data_base_path, data_folder_name,
-                                f'{data_folder_name}_test.npz'),
+                                'test.npz'),
                     allow_pickle=True)
+#     train = np.load(os.path.join(data_base_path, data_folder_name, 
+#                                     f'{data_folder_name}_train.npz'),
+#                     allow_pickle=True)
+#     test = np.load(os.path.join(data_base_path, data_folder_name,
+#                                 f'{data_folder_name}_test.npz'),
+#                     allow_pickle=True)
 
     # unpack dataset
     x_train, y_train = train['x'], train['y']
@@ -92,6 +99,7 @@ def load_LIFT_embedding(dataset_name, data_base_path=DEFAULT_DATA_PATH, use_torc
 
 def load_LF(dataset_name, data_base_path=DEFAULT_DATA_PATH):
     data_folder_name = get_data_folder_name(dataset_name)
+#     L = np.load(os.path.join(data_base_path, data_folder_name, 'LF.npy'))
     L = np.load(os.path.join(data_base_path, data_folder_name, f'{data_folder_name}_LF.npy'))
     
     # convert negative class -1 --> 0
@@ -113,6 +121,24 @@ def check_sbm_mapping_path(dataset_name, ot_type=None, use_LIFT_embedding=False,
             f'{data_folder_name}_SBM_mapping_{ot_type}_0->1.pt')
         sbm_mapping_10_path = os.path.join(mapping_base_path,
             f'{data_folder_name}_SBM_mapping_{ot_type}_1->0.pt')
+    
+    return os.path.exists(sbm_mapping_01_path) & os.path.exists(sbm_mapping_10_path)
+
+
+def check_sbm_mapping_path_with_seed(dataset_name, seed, ot_type=None, use_LIFT_embedding=False, data_base_path=DEFAULT_DATA_PATH):
+    
+    data_folder_name = get_data_folder_name(dataset_name)
+    mapping_base_path = os.path.join(data_base_path, data_folder_name, "SBM_mapping")
+    if use_LIFT_embedding:
+        sbm_mapping_01_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_0->1_{seed}.pt')
+        sbm_mapping_10_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_1->0_{seed}.pt')
+    else:
+        sbm_mapping_01_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_0->1_{seed}.pt')
+        sbm_mapping_10_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_1->0_{seed}.pt')
     
     return os.path.exists(sbm_mapping_01_path) & os.path.exists(sbm_mapping_10_path)
 
@@ -157,6 +183,55 @@ def save_sbm_mapping(sbm_mapping_01, sbm_mapping_10, dataset_name,
             f'{data_folder_name}_SBM_mapping_{ot_type}_0->1.pt')
         sbm_mapping_10_path = os.path.join(mapping_base_path,
             f'{data_folder_name}_SBM_mapping_{ot_type}_1->0.pt')
+    
+    torch.save(sbm_mapping_01, sbm_mapping_01_path)
+    torch.save(sbm_mapping_10, sbm_mapping_10_path)
+    
+    print(f"SBM ({ot_type}) saved in {sbm_mapping_01_path}, {sbm_mapping_01_path}!")
+    
+    
+
+def load_sbm_mapping_with_seed(dataset_name, seed, ot_type=None, use_LIFT_embedding=False, data_base_path=DEFAULT_DATA_PATH):
+    
+    data_folder_name = get_data_folder_name(dataset_name)
+    mapping_base_path = os.path.join(data_base_path, data_folder_name, "SBM_mapping")
+    if use_LIFT_embedding:
+        sbm_mapping_01 = torch.load(os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_0->1_{seed}.pt'))
+        sbm_mapping_10 = torch.load(os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_1->0_{seed}.pt'))
+    else:
+        sbm_mapping_01 = torch.load(os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_0->1_{seed}.pt'))
+        sbm_mapping_10 = torch.load(os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_1->0_{seed}.pt'))
+    
+    sbm_mapping_01 = sbm_mapping_01.type(torch.long)
+    sbm_mapping_10 = sbm_mapping_10.type(torch.long)
+    '''
+    # Usage exmaple (group 0 --> group 1 for LF i)
+    
+    L[a_train==0, i] = L[sbm_mapping_01, i]
+    
+    * Note that domain of counterfactual is the source group indices, not full indices
+    '''
+    return sbm_mapping_01, sbm_mapping_10
+
+def save_sbm_mapping_with_seed(sbm_mapping_01, sbm_mapping_10, dataset_name, seed,
+                     ot_type=None, use_LIFT_embedding=False, data_base_path=DEFAULT_DATA_PATH):
+    
+    data_folder_name = get_data_folder_name(dataset_name)
+    mapping_base_path = os.path.join(data_base_path, data_folder_name, "SBM_mapping")
+    if use_LIFT_embedding:
+        sbm_mapping_01_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_0->1_{seed}.pt')
+        sbm_mapping_10_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_embedding_SBM_mapping_{ot_type}_1->0_{seed}.pt')
+    else:
+        sbm_mapping_01_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_0->1_{seed}.pt')
+        sbm_mapping_10_path = os.path.join(mapping_base_path,
+            f'{data_folder_name}_SBM_mapping_{ot_type}_1->0_{seed}.pt')
     
     torch.save(sbm_mapping_01, sbm_mapping_01_path)
     torch.save(sbm_mapping_10, sbm_mapping_10_path)
