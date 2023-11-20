@@ -90,3 +90,18 @@ L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, sbm_diff_threshold)
 * [Synthetic experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/02_synthetic_data_experiment.ipynb)  - Section 5.2.
 * [FairML compatibility experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/03_compatibility_experiment.ipynb) - Section 5.3.
 * [SBM + Domino experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/04_domino_experiment.ipynb) - Section 5.4.
+
+Citation
+If you find our repository useful for your research, please consider citing our paper:
+
+
+### Citation
+If you find our repository useful for your research, please consider citing our paper:
+```
+@article{shin2023mitigating,
+  title={Mitigating Source Bias for Fairer Weak Supervision},
+  author={Shin, Changho and Cromp, Sonia and Adila, Dyah and Sala, Frederic},
+  journal={arXiv preprint arXiv:2303.17713},
+  year={2023}
+}
+```
