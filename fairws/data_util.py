@@ -158,6 +158,9 @@ def save_sbm_mapping(sbm_mapping_01, sbm_mapping_10, dataset_name,
         sbm_mapping_10_path = os.path.join(mapping_base_path,
             f'{data_folder_name}_SBM_mapping_{ot_type}_1->0.pt')
     
+    if not os.path.exists(mapping_base_path):
+        os.makedirs(mapping_base_path)
+        
     torch.save(sbm_mapping_01, sbm_mapping_01_path)
     torch.save(sbm_mapping_10, sbm_mapping_10_path)
     
