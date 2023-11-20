@@ -1,10 +1,10 @@
-# fair-ws: Mitigating Source Bias for Fairer Weak Supervision
+# Mitigating Source Bias for Fairer Weak Supervision
 
 ![framework](assets/sbm.png)
 
 This repository provides the official implementation of the following paper: 
 
-**Mitigating Source Bias for Fairer Weak Supervision**  
+**Mitigating Source Bias for Fairer Weak Supervision (NeurIPS 2023)**  
 Changho Shin, Sonia Cromp, Dyah Adila, Frederic Sala
 
 
