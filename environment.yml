@@ -2,6 +2,7 @@ name: fair-ws
 channels:
   - anaconda
   - defaults
+  - conda-forge
 dependencies:
   - python=3.9
   - faiss-gpu
