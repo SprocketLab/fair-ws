@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import tqdm
 import ot
+import faiss
 sys.path.append('../fairws')
 sys.path.append('../../fairws')
 from snorkel.labeling.model import LabelModel
@@ -13,61 +14,63 @@ torch.manual_seed(2023)
 
 DEFAULT_DATA_PATH = '../data'
 
-def get_baseline_pseudolabel(L, y_train=None):
-    
-    label_model = LabelModel(cardinality=2, verbose=False)
-    label_model.fit(L_train=L,
-                    n_epochs=1000, log_freq=100, seed=123)
-    y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
-    
-    return y_train_pseudo
 
+class FaissKNN:
+    # Efficient KNN using faiss (https://github.com/facebookresearch/faiss)
+    # Source: https://gist.github.com/j-adamczyk/74ee808ffd53cd8545a49f185a908584#file-knn_with_faiss-py
+    def __init__(self, k=1):
+        self.index = None
+        self.y = None
+        self.k = k
 
-def get_sbm_pseudolabel(L, x_train, a_train, dataset_name,
-                        ot_type=None, diff_threshold=0.05, use_LIFT_embedding=False,
-                        mapping_cache=True, data_base_path=DEFAULT_DATA_PATH):
-    
-    if check_sbm_mapping_path(dataset_name, ot_type, use_LIFT_embedding, data_base_path):
-        sbm_mapping_01, sbm_mapping_10 = load_sbm_mapping(dataset_name, ot_type,
-                                                        use_LIFT_embedding, data_base_path)
-    else:
-        sbm_mapping_01, sbm_mapping_10 = find_sbm_mapping(x_train, a_train, ot_type)
-        if mapping_cache:
-            save_sbm_mapping(sbm_mapping_01, sbm_mapping_10, dataset_name, ot_type, use_LIFT_embedding)
-            
-    
-    
-    L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, diff_threshold)
-    label_model = LabelModel(cardinality=2, verbose=False)
-    label_model.fit(L_train=L, n_epochs=1000, log_freq=100, seed=123)
-    y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
-    
-    return y_train_pseudo
+    def fit(self, X):
+        self.index = faiss.IndexFlatL2(X.shape[1])
+        self.index.add(X.astype(np.float32))
+        
+    def predict(self, X):
+        distances, indices = self.index.search(X.astype(np.float32), k=self.k)
+        return indices
 
-def correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, diff_threshold):
+def correct_bias(L, a_train, sbm_mapping, diff_threshold=0.05):
+    """
+    Correct bias related to a group variable a (a_train) using sbm_mapping
+    """
     if isinstance(L, np.ndarray):
         L = torch.tensor(L)
         
     m = L.shape[1]
     
     # Estimate accuracies
-    E_LY_Ap, E_LY_An = estimate_accuracies(L, a_train)
+    groupby_E_LY = estimate_accuracies(L, a_train)
     L_raw = L.clone()
     
     a_train = torch.tensor(a_train)
-    Ap_indices = torch.where(a_train==1)[0]
-    An_indices = torch.where(a_train!=1)[0]
+    
+    
+    unique_a = np.unique(a_train)
+    n_groups = len(unique_a)
     
     for i in range(m):
         L_i = L_raw[:, i]
-
-        if E_LY_Ap[i] >= E_LY_An[i] + diff_threshold: # LF|A=1 is more accurate than LF|A=0
-            for j, idx in enumerate(An_indices):
-                L[idx, i] = L_i[sbm_mapping_01[j]]
-
-        elif E_LY_An[i] >= E_LY_Ap[i] + diff_threshold: # LF|A=0 is more accurate than LF|A=1
-            for j, idx in enumerate(Ap_indices):
-                L[idx, i] = L_i[sbm_mapping_10[j]]
+        
+        # Find max accuracy group
+        max_E_LY = -1
+        max_acc_group = -1
+    
+        for group in unique_a:
+            if groupby_E_LY[group][i] > max_E_LY:
+                max_E_LY = groupby_E_LY[group][i]
+                max_acc_group = group
+        
+        # Transport
+        for src_group in unique_a:
+            src_group_indices = torch.where(a_train==src_group)[0]
+            
+            # if the accuracy gap between max accuracy group and src group is enough, then transport
+            if groupby_E_LY[max_acc_group][i] >= groupby_E_LY[src_group][i] + diff_threshold: 
+                for j, idx in enumerate(src_group_indices):
+                    src_dst_mapping = sbm_mapping[(src_group, max_acc_group)]
+                    L[idx, i] = L_i[src_dst_mapping[j]]
     return L
 
 def _triplet_median_i(L_cov, i):
@@ -106,51 +109,48 @@ def estimate_accuracies(L, a):
     """
     Estimate accuraices groupby
     """
-    L_Ap = L[a==1]
-    L_An = L[a!=1]
-    
-    E_LY_Ap = triplet_median(L_Ap)
-    E_LY_An = triplet_median(L_An)
-    return E_LY_Ap, E_LY_An
-
-
-
-def find_knn(data, queries, k):
-    if isinstance(data, np.ndarray):
-        data = torch.tensor(data)
-    if isinstance(queries, np.ndarray):
-        queries = torch.tensor(queries)
-        
-    # calculate the L2 distance between the queries and all data points
-    dist = torch.sum((data.unsqueeze(0) - queries.unsqueeze(1))**2, dim=-1)
-    # find the indices of the k nearest neighbors for each query
-    knn_dists, knn_indices = torch.topk(dist, k, dim=-1, largest=False)
-    return knn_indices, knn_dists
+    unique_a = np.unique(a)
+    groupby_E_LY = {}
+    for group in unique_a:
+        L_a = L[a==group]
+        E_LY_A = triplet_median(L_a)
+        groupby_E_LY[group] = E_LY_A
+    return groupby_E_LY
 
 def find_sbm_mapping(X, A, ot_type):
-    sbm_mapping_01 = _find_sbm_mapping_one_direction(X, A, ot_type, src_group=0)
-    sbm_mapping_10 = _find_sbm_mapping_one_direction(X, A, ot_type, src_group=1)
+    """
+    Compute pairwise SBM mapping
+    """
+    sbm_mapping = {}
     
-    return sbm_mapping_01, sbm_mapping_10
+    unique_a = np.unique(A)
+    
+    # Compute pairwise SBM mapping
+    for src_group in unique_a:
+        for dst_group in unique_a:
+            if src_group==dst_group:
+                continue
+            else:
+                sbm_mapping[(src_group, dst_group)] = _find_sbm_mapping_one_direction(X, A,
+                                                                                      src_group=src_group,
+                                                                                      dst_group=dst_group,
+                                                                                      ot_type=ot_type)
+    return sbm_mapping
     
 
-def _find_sbm_mapping_one_direction(X, A, ot_type=None, src_group=1, k=1, batch_size=4):
-    X = torch.tensor(X, dtype=torch.float32)
-    A = torch.tensor(A, dtype=torch.float32)
-    
-    
+def _find_sbm_mapping_one_direction(X, A, src_group, dst_group, ot_type=None, k=1, batch_size=4):
+    """
+    Learn mapping a source distribution (group) to a target distribution (group)
+    """
     if len(A.shape)>1:
         if A.shape[1]==1:
             A = A.squeeze()
     
-    if src_group==1:
-        dst_group=0
-    else:
-        dst_group=1
-    Ap_indices = torch.where(A==src_group)[0]
-    An_indices = torch.where(A==dst_group)[0]
+    X = X.astype(np.float32)
+    src_indices = np.where(A==src_group)[0]
+    dst_indices = np.where(A==dst_group)[0]
     
-    X_Ap, X_An_ = X[Ap_indices], X[An_indices]
+    X_src, X_dst_ = X[src_indices], X[dst_indices]
     
     if ot_type is not None:
         if ot_type=="linear":
@@ -160,37 +160,60 @@ def _find_sbm_mapping_one_direction(X, A, ot_type=None, src_group=1, k=1, batch_
         else:
             raise
             
-        X_Ap, X_An_ = torch.tensor(X_Ap).double(), torch.tensor(X_An_).double()
-        
         ot_num_sample_threshold = 10000
-        if max(X_Ap.shape[0], X_An_.shape[0]) > ot_num_sample_threshold:
-            ot_num_samples = min(X_Ap.shape[0], X_An_.shape[0], ot_num_sample_threshold)
-            # print("X_Ap.shape[0], X_An.shape[0]", X_Ap.shape[0], X_An_.shape[0], "do sampling...", ot_num_samples)
-            ot_sample_indices_Ap = np.random.choice(range(X_Ap.shape[0]), size=ot_num_samples, replace=False)
-            ot_sample_indices_An_ = np.random.choice(range(X_An_.shape[0]), size=ot_num_samples, replace=False)
+        if max(X_src.shape[0], X_dst_.shape[0]) > ot_num_sample_threshold:
+            ot_num_samples = min(X_src.shape[0], X_dst_.shape[0], ot_num_sample_threshold)
+            ot_sample_indices_src = np.random.choice(range(X_src.shape[0]), size=ot_num_samples, replace=False)
+            ot_sample_indices_dst_ = np.random.choice(range(X_dst_.shape[0]), size=ot_num_samples, replace=False)
             
-            ot_map.fit(Xs=X_Ap[ot_sample_indices_Ap], Xt=X_An_[ot_sample_indices_An_])
+            ot_map.fit(Xs=X_src[ot_sample_indices_src], Xt=X_dst_[ot_sample_indices_dst_])
         else:
-            ot_map.fit(Xs=X_Ap, Xt=X_An_)
-        X_Ap = ot_map.transform(X_Ap)
+            ot_map.fit(Xs=X_src, Xt=X_dst_)
+        X_src = ot_map.transform(X_src)
             
     
     # To get indices from the original X...
-    X_An = X.clone()
-    X_An[An_indices] = torch.tensor(X_An_).float()
-    X_An[Ap_indices] += 1e18 # almost infinitely far for the positive class so that never matched
+    X_dst = X.copy()
+    X_dst[dst_indices] = X_dst_
+    X_dst[src_indices] += 1e18 # almost infinitely far for the positive class so that never matched
     
+    knn = FaissKNN()
+    knn.fit(X_dst)
+    mapping = knn.predict(X_src)
     
-    mapping = torch.zeros((X_Ap.shape[0], k))
-    mapping_dists = torch.zeros((X_Ap.shape[0], k))
+    return torch.tensor(mapping.squeeze(), dtype=torch.long)
 
-    num_batches = X_Ap.shape[0] // batch_size + int((X.shape[0]%batch_size) > 0)
+def get_baseline_pseudolabel(L, y_train=None):
+    """
+    Wrapper function for WS baselines
+    """
     
-    for batch_idx in tqdm.trange(num_batches, desc="computing sbm mapping..."):
-        batch_start = batch_idx * batch_size
-        batch_end = (batch_idx + 1) * batch_size
-        knn_indices, knn_dists =  find_knn(X_An, X_Ap[batch_start:batch_end], k=k)
-        mapping[batch_start:batch_end] = knn_indices
-        mapping_dists[batch_start:batch_end] = knn_dists
+    label_model = LabelModel(cardinality=2, verbose=False)
+    label_model.fit(L_train=L,
+                    n_epochs=1000, log_freq=100, seed=123)
+    y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
     
-    return mapping.squeeze().type(torch.long)
+    return y_train_pseudo
+
+
+def get_sbm_pseudolabel(L, x_train, a_train, dataset_name,
+                        ot_type=None, diff_threshold=0.05, use_LIFT_embedding=False,
+                        mapping_cache=True, data_base_path=DEFAULT_DATA_PATH):
+    """
+    Wrapper function for SBM
+    """
+    
+    if check_sbm_mapping_path(dataset_name, ot_type, use_LIFT_embedding, data_base_path):
+        sbm_mapping = load_sbm_mapping(dataset_name, ot_type,
+                                       use_LIFT_embedding, data_base_path)
+    else:
+        sbm_mapping = find_sbm_mapping(x_train, a_train, ot_type)
+        if mapping_cache:
+            save_sbm_mapping(sbm_mapping, dataset_name, ot_type, use_LIFT_embedding)
+            
+    L = correct_bias(L, a_train, sbm_mapping, diff_threshold)
+    label_model = LabelModel(cardinality=2, verbose=False) # assume binary classification
+    label_model.fit(L_train=L, n_epochs=1000, log_freq=100, seed=123)
+    y_train_pseudo = label_model.predict(L, tie_break_policy="random")  
+    
+    return y_train_pseudo

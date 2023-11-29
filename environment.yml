@@ -4,11 +4,13 @@ channels:
   - defaults
 dependencies:
   - python=3.9
+  - faiss-gpu
   - pip
   - pip:
       - datasets==2.10.1
       - domino[clip,text] @ git+https://github.com/HazyResearch/domino@main
       - fairlearn==0.8.0
+      - faiss
       - huggingface==0.0.1
       - huggingface-hub==0.13.2
       - hyperlm
