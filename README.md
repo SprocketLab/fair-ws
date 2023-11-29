@@ -48,7 +48,7 @@ fair-ws/
 
 ````
 
-It can be done by the following command lines. It may take ~30 minutes (5.9G).
+It can be done by the following command lines. It may take ~30 minutes (6.24GB).
 
 ```
 cd fair-ws
@@ -61,24 +61,25 @@ unzip datasets.zip
 
 
 
-## Code example
-
+## Sample Usage
 ```
 from fairws.data_util import load_dataset
 from fairws.sbm import find_sbm_mapping, correct_bias
 
-# configurations
-dataset_name = "bank_marketing"
+# load data and LF; a_train and a_test are group variables
+x_train, y_train, a_train, x_test, y_test, a_test = load_dataset(...)
+L = load_LF(...))
+
+# Source bias mitigation (SBM)
 ot_type = "linear"
 sbm_diff_threshold = 0.05
+sbm_mapping = find_sbm_mapping(x_train, a_train, ot_type)
+L = correct_bias(L, a_train, sbm_mapping, sbm_diff_threshold)                
 
-# load data and LF
-x_train, y_train, a_train, x_test, y_test, a_test = load_dataset(dataset_name=dataset_name, data_base_path='../data')
-L = load_LF(dataset_name, data_base_path='../data')
-
-# Refine weak labels
-sbm_mapping_01, sbm_mapping_10 = find_sbm_mapping(x_train, a_train, ot_type)
-L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, sbm_diff_threshold)                                                                    
+# Standard weak supervision pipeline
+label_model = LabelModel(...)
+label_model.fit(L_train=L, ...)
+y_train_pseudo = label_model.predict(L, ...)  
                                                                     
 ```
 
@@ -90,10 +91,6 @@ L = correct_bias(L, a_train, sbm_mapping_01, sbm_mapping_10, sbm_diff_threshold)
 * [Synthetic experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/02_synthetic_data_experiment.ipynb)  - Section 5.2.
 * [FairML compatibility experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/03_compatibility_experiment.ipynb) - Section 5.3.
 * [SBM + Domino experiment](https://github.com/SprocketLab/fair-ws/blob/main/notebook/04_domino_experiment.ipynb) - Section 5.4.
-
-Citation
-If you find our repository useful for your research, please consider citing our paper:
-
 
 ### Citation
 If you find our repository useful for your research, please consider citing our paper:
