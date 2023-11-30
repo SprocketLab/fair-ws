@@ -1,0 +1,38 @@
+from setuptools import setup
+
+if __name__ == "__main__":
+    setup(name='fairws',
+          version='0.0.0a0',
+          description='Mitigating source bias for fairer weak supervision',
+          url='https://github.com/SprocketLab/fair-ws',
+          author='Changho Shin',
+          author_email='cshin23@wisc.edu',
+          license='Apache 2.0',
+          packages=['fairws'],
+          include_package_data=True,
+          install_requires=[
+              'datasets>=2.10.1',
+              'domino[clip,text] @ git+https://github.com/HazyResearch/domino@main',
+              'fairlearn>=0.8.0',
+              'huggingface>=0.0.1',
+              'huggingface-hub>=0.13.2',
+              'hyperlm',
+              'joblib>=1.2.0',
+              'matplotlib>=3.7.1',
+              'numpy>=1.24.2',
+              'pandas==1.5.3',
+              'pydantic<2',
+              'pot==0.8.2',
+              'scikit-learn>=0.24.2',
+              'scipy>=1.10.1',
+              'snorkel>=0.9.9',
+              'torch>=1.13.1',
+              'torchvision>=0.14.1',
+              'tqdm>=4.65.0',
+              'transformers>=4.26.1',
+              'jupyter',
+              'faiss-cpu>=1.7.1',
+          ],
+          python_requires=">=3.6",
+          )
+    
