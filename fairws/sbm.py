@@ -146,7 +146,7 @@ def _find_sbm_mapping_one_direction(X, A, src_group, dst_group, ot_type=None, k=
         if A.shape[1]==1:
             A = A.squeeze()
     
-    X = X.astype(np.float32)
+    X = X.astype(np.float64)
     src_indices = np.where(A==src_group)[0]
     dst_indices = np.where(A==dst_group)[0]
     
